@@ -3,8 +3,10 @@ Attribute VB_Name = "mockMain"
 'Generate a random GUID
 '@param iNumber - The number of items to generate
 '@returns - A column of random GUIDs
+'@devnote - Moved away from getGUID because regex generation significantly faster. getGUID is ~5x slower.
+'@devnote - Used [0123456789ABCDEF] instead of [0-9A-F] to give all characters equal weight, otherwise individual chars in 0-9 probability would be (1/2*1/10 =) 1/20 and in A-F probability would be (1/2*1/6 =) 1/12
 Public Function mockBasic_GUID(ByVal iNumber As Long) As Variant
-  mockBasic_GUID = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf getGUID, vbString))
+  mockBasic_GUID = mockCalc_Regex(iNumber, "[0123456789ABCDEF]{8}-[0123456789ABCDEF]{4}-4[0123456789ABCDEF]{3}-[89AB][0123456789ABCDEF]{3}-[0123456789ABCDEF]{12}")
 End Function
 
 'Generates a random boolean
@@ -12,7 +14,7 @@ End Function
 '@param trueWeight - The probability of generating a true value
 '@returns - A column of random booleans
 Public Function mockBasic_Boolean(ByVal iNumber as Long, Optional ByVal trueWeight as double) As Variant
-  mockBasic_Boolean = mockCalc_WeightedArray(iNumber, Array(True, trueWeight, False, 1 - trueWeight))
+  mockBasic_Boolean = mockCalc_WeightedArray(iNumber, True, trueWeight, False, 1 - trueWeight)
 End Function
 
 'Generate a column of empty values
@@ -28,6 +30,19 @@ End Function
 '@returns - A column of the given value
 Public Function mockBasic_Value(ByVal iNumber as Long, ByVal value as Variant) As Variant
   mockBasic_Error = genStatic(iNumber, value)
+End Function
+
+'Generate a column of incrementing numbers
+'@param iNumber - The number of items to generate
+'@param iStart - The starting number
+'@param iStep - The increment
+'@returns - A column of incrementing numbers
+Public Function mockBasic_Increment(ByVal iNumber as Long, Optional ByVal iStart As Long = 1, Optional ByVal iStep As Long = 1) As Variant
+  Dim vRet(): ReDim vRet(1 To iNumber, 1 To 1)
+  Dim i As Long: For i = 1 To iNumber
+    vRet(i, 1) = iStart + (i - 1) * iStep
+  Next
+  mockBasic_Increment = vRet
 End Function
 
 'Generate a column containing a random color
@@ -67,7 +82,7 @@ End Function
 '@returns - A column of random dates skewed with data quality issues as if it were written by a human
 Public Function mockBasic_DateSkewed(ByVal iNumber as Long, Optional ByVal iMaxDate As Date = 0, Optional ByVal iMinDate As Date = #1/1/2000#) As Variant
   if iMaxDate = 0 then iMaxDate = now()
-  mockBasic_DateSkewed = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf generateDateSkewed, vbDate, Array(vbDate, vbDate)).Bind(iMaxDate, iMinDate))
+  mockBasic_DateSkewed = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf genDateSkewed, vbDate, Array(vbDate, vbDate)).Bind(iMaxDate, iMinDate))
 End Function
 
 'Generate a column of random phone numbers
@@ -76,6 +91,47 @@ End Function
 '@remark - Original source: https://regex101.com/r/wZ4uU6/2
 Public Function mockBasic_Telephone(ByVal iNumber as Long) as Variant
   mockBasic_Telephone = mockCalc_Regex(iNumber, "(?:([+]\d{1,4})[-.\s]?)?(?:[(](\d{1,3})[)][-.\s]?)?(\d{1,4})[-.\s]?(\d{1,4})[-.\s]?(\d{1,9})")
+End Function
+
+'Generate a column of random first names
+'@param iNumber - The number of items to generate
+'@returns - A column of random first names
+Public Function mockPerson_FirstName(ByVal iNumber as Long) As Variant
+  mockPerson_FirstName = mockCalc_ValueFromRange(iNumber, BasicData.Range("FirstNames[Name]"))
+End Function
+
+'Generate a column of random last names
+'@param iNumber - The number of items to generate
+'@returns - A column of random last names
+Public Function mockPerson_LastName(ByVal iNumber as Long) As Variant
+  mockPerson_LastName = mockCalc_ValueFromRange(iNumber, BasicData.Range("LastNames[Name]"))
+End Function
+
+'Generate a column of random full names
+'@param iNumber - The number of items to generate
+'@returns - A column of random full names
+Public Function mockPerson_FullName(ByVal iNumber as Long) As Variant
+  firstNames = mockPerson_FirstName(iNumber)
+  lastNames = mockPerson_LastName(iNumber)
+  Dim vRet(): ReDim vRet(1 To iNumber, 1 To 1)
+  Dim i As Long: For i = 1 To iNumber
+    vRet(i, 1) = firstNames(i, 1) & " " & lastNames(i, 1)
+  Next
+  mockPerson_FullName = vRet
+End Function
+
+'Generate a column of random job titles
+'@param iNumber - The number of items to generate
+'@returns - A column of random job titles
+Public Function mockPerson_JobTitle(ByVal iNumber as Long) As Variant
+  mockPerson_JobTitle = mockCalc_ValueFromRange(iNumber, BasicData.Range("JobTitles[Title]"))
+End Function
+
+'Generate a column of random nationalities
+'@param iNumber - The number of items to generate
+'@returns - A column of random nationalities
+Public Function mockPerson_Nationality(ByVal iNumber as Long) as Variant
+  mockPerson_Nationality = mockCalc_ValueFromRange(iNumber, BasicData.Range("Countries[Nationality]"))
 End Function
 
 'Generate a column of random bitcoin addresses
@@ -190,9 +246,9 @@ End Function
 '@param iNumber - The number of items to generate
 '@returns - A column of random house names
 Public Function mockLocation_HouseName(ByVal iNumber as Long) As Variant
-  static houseNouns as variant: if isEmpty(houseNouns) then houseNouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("HouseNouns[Word]"))
-  static adjectives as variant: if isEmpty(adjectives) then adjectives = mockCalc_ValueFromRange(iNumber, BasicData.Range("Adjectives[Adjective]"))
-  static nouns as variant: if isEmpty(nouns) then nouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("Nouns[Noun]"))
+  houseNouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("HouseNouns[Word]"))
+  adjectives = mockCalc_ValueFromRange(iNumber, BasicData.Range("Adjectives[Adjective]"))
+  nouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("Nouns[Noun]"))
   Dim vRet(): Redim vRet(1 To iNumber, 1 To 1)
   For i = 1 To iNumber
     select case rnd()
@@ -212,9 +268,9 @@ End Function
 '@param iNumber - The number of items to generate
 '@returns - A column of random street names
 Public Function mockLocation_StreetName(ByVal iNumber as Long) As Variant
-  static streetNouns as variant: if isEmpty(streetNouns) then streetNouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("StreetNouns[Word]"))
-  static adjectives as variant: if isEmpty(adjectives) then adjectives = mockCalc_ValueFromRange(iNumber, BasicData.Range("Adjectives[Adjective]"))
-  static nouns as variant: if isEmpty(nouns) then nouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("Nouns[Noun]"))
+  streetNouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("StreetNouns[Word]"))
+  adjectives = mockCalc_ValueFromRange(iNumber, BasicData.Range("Adjectives[Adjective]"))
+  nouns = mockCalc_ValueFromRange(iNumber, BasicData.Range("Nouns[Noun]"))
   Dim vRet(): Redim vRet(1 To iNumber, 1 To 1)
   For i = 1 To iNumber
     select case rnd()
@@ -230,29 +286,18 @@ Public Function mockLocation_StreetName(ByVal iNumber as Long) As Variant
   mockLocation_StreetName = vRet
 End Function
 
+'Generate a random country
+'@param iNumber - The number of items to generate
+'@returns - A column of random countries
+Public Function mockLocation_Country(ByVal iNumber as Long) As Variant
+  mockLocation_Country = mockCalc_ValueFromRange(iNumber, BasicData.Range("Countries[Country]"))
+End Function
+
 'Generate a random UK postcode
 '@param iNumber - The number of items to generate
 '@returns - A column of random postcodes
 Public Function mockUK_PostCode(ByVal iNumber As Long) As Variant
   mockUK_PostCode = mockCalc_Regex(iNumber, "[A-Z]{1,2}\d{1,2} \d[A-Z]{2}")
-End Function
-
-'Make a random percentage of values blank
-'@param vArr - The array to blankify
-'@param percentBlank - The percentage of values to be blank
-'@returns - The blankified array
-Public Function Blankify(Byval vArr as variant, ByVal percentBlank as Double) as variant
-  if percentBlank > 1 then percentBlank = 1
-  if percentBlank < 0 then percentBlank = 0
-  if percentBlank = 0 then Blankify = vArr: exit function
-
-  Call Randomize
-  dim i as long: For i = lbound(vArr,1) to ubound(vArr,1)
-    if rnd() < percentBlank then
-      vArr(i,1) = Empty
-    end if
-  next
-  Blankify = vArr
 End Function
 
 'Generate a random UK NHS Number
@@ -312,8 +357,15 @@ End Function
 '@param values - The range to obtain a random value from
 '@returns - A column of random items from the range
 '@remark Useful for generating ID's from an existing range e.g. mocking relationships
+'@devnote - Moved away from genColumn because of inability to cache vValues efficiently
 Public Function mockCalc_ValueFromRange(ByVal iNumber As Long, values As Range) As Variant
-  mockCalc_ValueFromRange = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf getRandomValueFromRange, vbVariant, Array(vbObject)).Bind(values))
+  Dim vRet(): ReDim vRet(1 To iNumber, 1 To 1)
+  Dim v: v = values.value
+  Dim count As Long: count = UBound(v, 1)
+  For i = 1 To iNumber
+    vRet(i, 1) = v(RandBetween(1, count), 1)
+  Next
+  mockCalc_ValueFromRange = vRet
 End Function
 
 'Mock a value present in some range, weighted by another range
@@ -322,8 +374,42 @@ End Function
 '@param weights - The range to obtain the weights from
 '@returns - A column of random items from the values range weighted by the weights range
 '@remark Useful for generating ID's from an existing range e.g. mocking relationships especially many-to-many relationships
+'@devnote - Moved away from genColumn because of inability to cache vValues and vWeights efficiently
 Public Function mockCalc_ValueFromRangeWeighted(ByVal iNumber As Long, values As Range, weights As Range) As Variant
-  mockCalc_ValueFromRangeWeighted = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf getRandomValueFromRangeWeighted, vbVariant, Array(vbObject, vbObject)).Bind(values, weights))
+  Dim vRet(): ReDim vRet(1 To iNumber, 1 To 1)
+  Dim vValues: vValues = values.value
+  Dim iWeightCount As Long: iWeightCount = weights.Rows.CountLarge
+
+  'Cache weight calculation
+  static weightsCache as Object: set weightsCache = CreateObject("Scripting.Dictionary")
+  if not weightsCache.exists(weights.address) then
+    Dim vWeights: vWeights = weights.value
+    Dim vSumWeights(): ReDim vSumWeights(1 To iWeightCount, 1 To 1)
+    Dim i as long: For i = 1 to iWeightCount
+      vSumWeights(i, 1) = vSumWeights(iif(i=1,1,i - 1), 1) + weights(i, 1)
+    Next
+    
+    'Normalize weights
+    For i = 1 to iWeightCount
+      vSumWeights(i, 1) = vSumWeights(i, 1) / vSumWeights(iWeightCount, 1)
+    next
+    weightsCache.add weights.address, vSumWeights
+  else
+    vSumWeights = weightsCache(weights.address)
+  end if
+
+  'Generate random values
+  For i = 1 to iNumber
+    dim rand as double: rand = rnd()
+    Dim j as long: For j = 1 to iWeightCount
+      If rand <= vSumWeights(j, 1) Then
+        vRet(i, 1) = vValues(j, 1)
+        Exit For
+      End If
+    Next
+  Next
+
+  mockCalc_ValueFromRangeWeighted = vRet
 End Function
 
 'Obtain a random item from an array of weighted items
@@ -372,35 +458,24 @@ Public Function mockTopo_Elevation(ByVal Xs as Range, ByVal Ys as Range, Optiona
   mockTopo_Elevation = vRet
 End Function
 
-'Generate a perlin noise value for a given set of X and Y coordinates
-'@param X - The X coordinate
-'@param Y - The Y coordinate
-'@param Persistence - The persistence of the noise
-'@param Frequency - The frequency of the noise
-'@param Amplitude - The amplitude of the noise
-'@param Octaves - The number of octaves
-'@param RandomSeed - The seed to use for the random number generator
-'@param OffsetX - The X offset
-'@param OffsetY - The Y offset
-'@returns - A perlin noise value
-Private Function PerlinNoise2D(ByVal X As Double, ByVal Y As Double, ByVal Persistence As Double, ByVal Frequency As Double, ByVal Amplitude As Double, ByVal Octaves As Long, ByVal RandomSeed As Long, ByVal OffsetX As Double, ByVal OffsetY As Double) As Double
-  Dim Seed As Long: Seed = RandomSeed
-  Dim n As Long
-  For n = 0 To Octaves - 1
-    Dim Frequency2 As Double: Frequency2 = Frequency ^ n
-    Dim Amplitude2 As Double: Amplitude2 = Amplitude ^ n
-    Dim X2 As Double: X2 = X * Frequency2 + OffsetX
-    Dim Y2 As Double: Y2 = Y * Frequency2 + OffsetY
-    Dim i As Long
-    i = (Int(X2) + Int(Y2) * 57) + Seed
-    i = (i Xor 13) * i
-    Dim P As Double: P = (1.0# - ((i * (i * i * 15731 + 789221) + 1376312589) And &H7FFFFFFF) / 1073741824.0#)
-    Dim Total As Double: Total = Total + P * Amplitude2
-  Next
-  PerlinNoise2D = Total * Persistence
+
+'Make a random percentage of values blank
+'@param vArr - The array to blankify
+'@param percentBlank - The percentage of values to be blank
+'@returns - The blankified array
+Public Function mockCalc_Blankify(Byval vArr as variant, ByVal percentBlank as Double) as variant
+  if percentBlank > 1 then percentBlank = 1
+  if percentBlank < 0 then percentBlank = 0
+  if percentBlank = 0 then Blankify = vArr: exit function
+
+  Call Randomize
+  dim i as long: For i = lbound(vArr,1) to ubound(vArr,1)
+    if rnd() < percentBlank then
+      vArr(i,1) = vbNullChar
+    end if
+  next
+  mockCalc_Blankify = vArr
 End Function
-
-
 
 'TODO: Consider file path - https://regex101.com/library/zWGLMP
 'TODO: Consider youtube link - https://regex101.com/library/OY96XI
@@ -490,59 +565,6 @@ Private Function genDateSkewed(ByVal iMaxDate As Date, ByVal iMinDate As Date) A
   genDateSkewed = format(genDate(iMaxDate, iMinDate), sFormat)
 End Function
 
-'Get a random value from a given range
-'@param values - The range to obtain a random value from
-'@returns - A random value from the range
-Private Function getRandomValueFromRange(ByVal values As Range) As Variant
-  Static cache As Object: If cache Is Nothing Then Set cache = CreateObject("Scripting.Dictionary")
-  If Not cache.Exists(values.Address) Then
-    Set cache(values.Address) = CreateObject("Scripting.Dictionary")
-    cache(values.Address)("values") = values.value
-    cache(values.Address)("count") = values.Rows.CountLarge
-  End If
-  With cache(values.Address)
-    getRandomValueFromRange = .Item("values")(RandBetween(1, .Item("count")), 1)
-  End With
-End Function
-
-'Get a random value from a given range, weighted by another range
-'@param values - The range to obtain a random value from
-'@param weights - The range to obtain the weights from
-'@returns - A random value from the range weighted by the weights
-Private Function getRandomValueFromRangeWeighted(ByVal rValues As Range, ByVal rWeights As Range) As Variant
-  Static cache As Object: If cache Is Nothing Then Set cache = CreateObject("Scripting.Dictionary")
-  If Not cache.Exists(rValues.Address) Then
-    Set cache(rValues.Address) = CreateObject("Scripting.Dictionary")
-    cache(rValues.Address)("values") = rValues.value
-    
-    'Calculate cumulative weights
-    Dim weights As Variant: weights = rWeights.value
-    Dim iWeightCount As Long: iWeightCount = rWeights.Rows.CountLarge
-    Dim vSumWeights(): ReDim vSumWeights(1 To iWeightCount, 1 To 1)
-    Dim i as long: For i = 1 to iWeightCount
-      vSumWeights(i, 1) = vSumWeights(iif(i=1,1,i - 1), 1) + weights(i, 1)
-    Next
-    
-    'Normalize weights
-    For i = 1 to iWeightCount
-      vSumWeights(i, 1) = vSumWeights(i, 1) / vSumWeights(iWeightCount, 1)
-    next
-    cache(rValues.Address)("weights") = vSumWeights
-
-    cache(rValues.Address)("count") = rValues.Rows.CountLarge
-  End If
-  With cache(rValues.Address)
-    Dim vWeights as variant: vWeights = .Item("weights")
-    dim rand as double: rand = rnd()
-    For i = 1 to .item("count")
-      If rand <= vWeights(i, 1) Then
-        getRandomValueFromRangeWeighted = .Item("values")(i, 1)
-        Exit Function
-      End If
-    Next
-  End With
-End Function
-
 'Obtain a random item from an array of weighted items
 '@param weightedItems - An array of items and their weights.  The first item is the item, the second is the weight. [item1, weight1, item2, weight2, ...]
 '@returns - A random item from the array
@@ -558,15 +580,33 @@ Private Function getRandomWeightedArrayItem(ByRef weightedItems) As Variant
   Next
 End Function
 
-'Generate a random GUID
-'@returns - A random GUID
-Private Function getGUID() As String
-  Call Randomize 'Ensure random GUID generated
-  getGUID = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
-  getGUID = Replace(getGUID, "y", Hex(Rnd() And &H3 Or &H8))
-  Dim i As Long: For i = 1 To 30
-    getGUID = Replace(getGUID, "x", Hex$(Int(Rnd() * 16)), 1, 1)
+
+'Generate a perlin noise value for a given set of X and Y coordinates
+'@param X - The X coordinate
+'@param Y - The Y coordinate
+'@param Persistence - The persistence of the noise
+'@param Frequency - The frequency of the noise
+'@param Amplitude - The amplitude of the noise
+'@param Octaves - The number of octaves
+'@param RandomSeed - The seed to use for the random number generator
+'@param OffsetX - The X offset
+'@param OffsetY - The Y offset
+'@returns - A perlin noise value
+Private Function PerlinNoise2D(ByVal X As Double, ByVal Y As Double, ByVal Persistence As Double, ByVal Frequency As Double, ByVal Amplitude As Double, ByVal Octaves As Long, ByVal RandomSeed As Long, ByVal OffsetX As Double, ByVal OffsetY As Double) As Double
+  Dim Seed As Long: Seed = RandomSeed
+  Dim n As Long
+  For n = 0 To Octaves - 1
+    Dim Frequency2 As Double: Frequency2 = Frequency ^ n
+    Dim Amplitude2 As Double: Amplitude2 = Amplitude ^ n
+    Dim X2 As Double: X2 = X * Frequency2 + OffsetX
+    Dim Y2 As Double: Y2 = Y * Frequency2 + OffsetY
+    Dim i As Long
+    i = (Int(X2) + Int(Y2) * 57) + Seed
+    i = (i Xor 13) * i
+    Dim P As Double: P = (1.0# - ((i * (i * i * 15731 + 789221) + 1376312589) And &H7FFFFFFF) / 1073741824.0#)
+    Dim Total As Double: Total = Total + P * Amplitude2
   Next
+  PerlinNoise2D = Total * Persistence
 End Function
 
 'Generate a random number between min and max
