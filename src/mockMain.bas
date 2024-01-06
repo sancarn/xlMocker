@@ -354,16 +354,17 @@ End Function
 '@remark -
 '@devnote -
 Public Function mockCalc_ValueFromCSV(ByVal iNumber As Long, ByVal sFilePath As String, ByVal sColumnName As String, Optional ByVal delimiter As String = ",", Optional ByVal newLine As String = vbCrLf, Optional ByVal iRowCount As Long = -1) As Variant
-  Dim csv As CSVinterface: Set csv = New CSVinterface
+  Dim csv As New CSVinterface
   
-  Set csv = csv.Create(sFilePath, sColumnName, delimiter, newLine)
-  If iRowCount = -1 Then iRowCount = csv.count
-  Dim indices(): ReDim indices(1 To iNumber)
-  Dim i As Long
-  For i = 1 To iNumber
-    indices(i) = RandBetween(1, iRowCount)
-  Next
-  mockCalc_ValueFromCSV = csv.items.CopyToArray2(indices) 'Copy and transform to 2D array
+  With csv.Create(sFilePath, sColumnName, delimiter, newLine).items
+    If iRowCount = -1 Then iRowCount = .count
+    Dim indices(): ReDim indices(1 To iNumber)
+    Dim i As Long
+    For i = 1 To iNumber
+      indices(i) = RandBetween(1, iRowCount)
+    Next
+    mockCalc_ValueFromCSV = .CopyToArray2(indices) 'Copy and transform to 2D array
+  End With
 End Function
 
 'Mock a value present in some range, weighted by another range
