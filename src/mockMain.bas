@@ -61,8 +61,9 @@ End Function
 '@param iMaxWords - The maximum number of words to generate
 '@param iMinWords - The minimum number of words to generate
 '@returns - A column of random lorem ipsum text
+'@devnote - Moved away from `stdCallback.CreateFromPointer` to `stdCallback.CreateFromModule` because pointer based was slower and crash prone(?). Probably a UDF specific thing.
 Public Function mockBasic_LoremIpsum(ByVal iNumber as Long, Optional ByVal iMaxParagraphs As Long = 1, Optional ByVal iMinParagraphs As Long = 1, Optional ByVal iMaxSentences As Long = 4, Optional ByVal iMinSentences As Long = 2, Optional ByVal iMaxWords As Long = 10, Optional ByVal iMinWords As Long = 5) As Variant
-  mockBasic_LoremIpsum = genColumn(iNumber, stdCallback.CreateFromPointer(AddressOf generateLoremIpsum, vbString, Array(vbLong, vbLong, vbLong, vbLong, vbLong, vbLong)).Bind(iMaxParagraphs, iMinParagraphs, iMaxSentences, iMinSentences, iMaxWords, iMinWords))
+  mockBasic_LoremIpsum = genColumn(iNumber, stdCallback.CreateFromModule("mockLoremIpsum", "GenerateLoremIpsum").Bind(iMaxParagraphs, iMinParagraphs, iMaxSentences, iMinSentences, iMaxWords, iMinWords))
 End Function
 
 'Generate a column of random dates
@@ -435,6 +436,65 @@ Public Function mockCalc_Regex(ByVal iNumber As Long, ByVal sRegex As String) as
   mockCalc_Regex = genColumn(iNumber, stdCallback.CreateFromObjectMethod(rx, "Generate"))
 End Function
 
+'Generate a random value from a CSV file
+'@param iNumber - The number of items to generate
+'@param sFilePath - The path to the CSV file
+'@param sColumnName - The name of the column to generate values from
+'@returns - A column of random items from the CSV file
+'@remark - Does not load the entire CSV file into memory.  Instead, it uses Open and Seek.
+Public Function mockCalc_ValueFromCSV(ByVal iNumber As Long, ByVal sFilePath As String, ByVal sColumnName as string, Optional Byval iRowCount as long = -1) As Variant
+  Dim vRet(): ReDim vRet(1 To iNumber, 1 To 1)
+  'Find row count in csv unless specified
+  Dim iFileNum As Long: iFileNum = FreeFile
+  if iRowCount = -1 then
+    Open sFilePath For Input As #iFileNum
+      Do Until EOF(iFileNum)
+        Dim sLine as string: Line Input #iFileNum, sLine
+        iRowCount = iRowCount + 1
+      Loop
+    Close #iFileNum
+  end if
+
+  'Generate random row IDs and put these into vRet
+  Dim indices() as Long: ReDim indices(1 To iNumber)
+  Dim sortedIndices() as Long: Redim sortedIndices(1 to iNumber)
+  Dim i As Long: For i = 1 To iNumber
+    indices(i) = RandBetween(1, iRowCount)
+    sortedIndices(i) = indices(i)
+  next
+
+  'Make a sorted version of indices (ascending order) to minimise number of passes through the CSV file.
+  Call QuickSort(sortedIndices)
+  
+  'Read the CSV file and put the values into vRet
+  Open sFilePath For Input As #iFileNum
+    Dim iCurrentRow as long: iCurrentRow = -1
+    Dim iCurrentIndex as long: iCurrentIndex = 1
+    Do Until EOF(iFileNum)
+      Dim sLine as string: Line Input #iFileNum, sLine
+      iCurrentRow = iCurrentRow + 1
+      if iCurrentRow = 0 then
+        'Find the column index
+        Dim iColumnIndex as long: iColumnIndex = -1
+        Dim vHeaders: vHeaders = Split(sLine, ",")
+        Dim j as long: For j = 0 to ubound(vHeaders)
+          if vHeaders(j) = sColumnName then
+            iColumnIndex = j
+            exit for
+          end if
+        next
+      else
+        if iCurrentRow = sortedIndices(iCurrentIndex) then
+          vRet(iCurrentIndex, 1) = Split(sLine, ",")(sColumnName)
+          iCurrentIndex = iCurrentIndex + 1
+          if iCurrentIndex > iNumber then exit do
+        end if
+      end if
+    Loop
+
+  mockCalc_ValueFromCSV = vRet
+End Function
+
 'Generate a random set of perlin noise values for a given set of X and Y coordinates
 '@param Xs - The X coordinates
 '@param Ys - The Y coordinates
@@ -630,4 +690,42 @@ Private Function ProperCase(ByVal s As String) As String
 End Function
 
 
+'QuickSort3
+'@private
+'@param vArray - Array to sort in-place
+'@param plngLeft - The left-most index of the array to sort
+'@param plngRight - The right-most index of the array to sort
+'@remark - Omit plngLeft and plngRight to sort the entire array.
+'@devnote - Source: https://www.vbforums.com/showthread.php?473677-VB6-Sorting-algorithms-%28sort-array-sorting-arrays%29
+Public Sub QuickSort(ByRef vArray As Variant, Optional ByVal plngLeft As Long, Optional ByVal plngRight As Long)
+    Dim lngFirst As Long
+    Dim lngLast As Long
+    Dim varMid As Variant
+    Dim varSwap As Variant
+    
+    If plngRight = 0 Then
+        plngLeft = LBound(vArray)
+        plngRight = UBound(vArray)
+    End If
+    lngFirst = plngLeft
+    lngLast = plngRight
+    varMid = vArray((plngLeft + plngRight) \ 2)
+    Do
+        Do While vArray(lngFirst) < varMid And lngFirst < plngRight
+            lngFirst = lngFirst + 1
+        Loop
+        Do While varMid < vArray(lngLast) And lngLast > plngLeft
+            lngLast = lngLast - 1
+        Loop
+        If lngFirst <= lngLast Then
+            varSwap = vArray(lngFirst)
+            vArray(lngFirst) = vArray(lngLast)
+            vArray(lngLast) = varSwap
+            lngFirst = lngFirst + 1
+            lngLast = lngLast - 1
+        End If
+    Loop Until lngFirst > lngLast
+    If plngLeft < lngLast Then QuickSort vArray, plngLeft, lngLast
+    If lngFirst < plngRight Then QuickSort vArray, lngFirst, plngRight
+End Sub
 
